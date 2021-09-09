@@ -780,5 +780,4 @@ std::shared_ptr<UserStatusConnector> Account::userStatusConnector() const
 {
     return _userStatusConnector;
 }
-
 } // namespace OCC
