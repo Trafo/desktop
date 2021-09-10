@@ -211,11 +211,50 @@ void PropagateUploadFileCommon::setDeleteExisting(bool enabled)
     _deleteExisting = enabled;
 }
 
+bool PropagateUploadFileCommon::correctInvalidFileName()
+{
+    const auto originalFilePathSyncFolder = _item->_file;
+    auto slashPosition = originalFilePathSyncFolder.lastIndexOf('/');
+    const auto originalFileParentPathSyncFolder = slashPosition >= 0 ? originalFilePathSyncFolder.left(slashPosition) : QString();
+    const auto newFileName = originalFilePathSyncFolder.mid(slashPosition + 1).trimmed();
+    const auto originalFilePathAbsolute = propagator()->fullLocalPath(_item->_file);
+    slashPosition = originalFilePathAbsolute.lastIndexOf('/');
+    const auto orignalFileParentPathAbsolute = originalFilePathAbsolute.left(slashPosition);
+    const QString newFilePathAbsolute = orignalFileParentPathAbsolute + QStringLiteral("/") + newFileName;
+
+    if (newFilePathAbsolute != originalFilePathAbsolute) {
+        QFileInfo newFileInfo(newFilePathAbsolute);
+        if (newFileInfo.exists()) {
+            done(SyncFileItem::NormalError, tr("File contains trailing spaces and coudn't be renamed, because a file with the same name already exists."));
+            return false;
+        }
+
+        QFile originalFile(originalFilePathAbsolute);
+        const auto renameSuccess = originalFile.rename(newFilePathAbsolute);
+        if (!renameSuccess) {
+            done(SyncFileItem::NormalError, tr("File contains trailing spaces and coudn't be renamed."));
+            return false;
+        }
+
+        const QString newFilePathSyncFolder = originalFileParentPathSyncFolder.isEmpty()
+            ? newFileName
+            : originalFileParentPathSyncFolder + QStringLiteral("/") + newFileName;
+        _item->_file = newFilePathSyncFolder;
+        _item->_modtime = FileSystem::getModTime(newFilePathAbsolute);
+    }
+
+    return true;
+}
+
 void PropagateUploadFileCommon::start()
 {
     const auto path = _item->_file;
     const auto slashPosition = path.lastIndexOf('/');
     const auto parentPath = slashPosition >= 0 ? path.left(slashPosition) : QString();
+
+    if (!correctInvalidFileName()) {
+        return;
+    }
 
     SyncJournalFileRecord parentRec;
     bool ok = propagator()->_journal->getFileRecord(parentPath, &parentRec);

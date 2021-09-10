@@ -247,6 +247,7 @@ public:
      * Default: false.
      */
     void setDeleteExisting(bool enabled);
+    bool correctInvalidFileName();
 
     /* start should setup the file, path and size that will be send to the server */
     void start() override;
