@@ -367,7 +367,7 @@ PropagateItemJob *OwncloudPropagator::createJob(const SyncFileItemPtr &item)
                 job.reset(new PropagateUploadFileV1{this, item});
             }
             job->setDeleteExisting(deleteExisting);
-            if (ignoreFilesUpload(item)) {
+            if (!deleteExisting && ignoreFilesUpload(item)) {
                 _delayedJobs.push_back(std::move(job));
             }
             return job.release();
@@ -422,6 +422,7 @@ void OwncloudPropagator::start(SyncFileItemVector &&items)
             items.end());
     }
 
+    _scheduleDelayedJobs = false;
     _delayedJobs.clear();
     _rootJob.reset(new PropagateRootDirectory(this));
     QStack<QPair<QString /* directory name */, PropagateDirectory * /* job */>> directories;
@@ -811,7 +812,7 @@ Result<Vfs::ConvertToPlaceholderResult, QString> OwncloudPropagator::staticUpdat
 
 bool OwncloudPropagator::ignoreFilesUpload(const SyncFileItemPtr &item) const
 {
-    return !item->_isEncrypted;
+    return !_scheduleDelayedJobs && !item->_isEncrypted;
 }
 
 // ================================================================================
@@ -1177,8 +1178,10 @@ void PropagateRootDirectory::slotDirDeletionJobsFinished(SyncFileItem::Status st
 
 bool PropagateRootDirectory::scheduleDelayedJobs()
 {
+    qCInfo(lcPropagator) << "PropagateRootDirectory::scheduleDelayedJobs";
+    propagator()->setScheduleDelayedJobs(true);
     for(auto &oneJob : propagator()->delayedJobs()) {
-        _subJobs.appendJob(oneJob.release());
+        _subJobs.appendTask(oneJob->_item);
     }
     propagator()->delayedJobs().clear();
     _subJobs._state = Running;
